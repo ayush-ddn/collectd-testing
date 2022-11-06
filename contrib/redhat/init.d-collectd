@@ -1,0 +1,176 @@
+#!/bin/bash
+#
+# collectd    Startup script for the Collectd statistics gathering daemon
+# chkconfig: - 99 01
+# description: Collectd is a statistics gathering daemon used to collect \
+#   system information ie. cpu, memory, disk, network
+# processname: collectd
+# config: /etc/collectd.conf
+# config: /etc/sysconfig/collectd
+# pidfile: /var/run/collectd.pid
+
+# Source function library.
+. /etc/init.d/functions
+
+RETVAL=0
+ARGS=""
+prog="collectdmon"
+service="collectd"
+CONFIG=/etc/collectd.conf
+COLLECTD=/usr/sbin/collectd
+COLLECTDMONPIDDIR="/var/run"
+COLLECTDMONPID="$COLLECTDMONPIDDIR/collectdmon.pid"
+
+MAXWAIT=30
+COLLECTD_VALGRIND_PREFIX="/tmp/collectd"
+
+if [ -r /etc/sysconfig/$service ]; then
+	. /etc/sysconfig/$service
+fi
+
+if [[ ! -d $COLLECTDMONPIDDIR ]]; then
+	mkdir -p $COLLECTDMONPIDDIR
+	[ -n "${RUNAS}" ] && chown "${RUNAS}:" "$COLLECTDMONPIDDIR"
+fi
+
+check_config() {
+        if test ! -r "$CONFIG"; then
+                return 2
+        fi
+        if ! $COLLECTD -t -C "$CONFIG"; then
+                return 1
+        fi
+        return 0
+}
+
+memcheck_prepare () {
+	status -p $COLLECTDMONPID $prog > /dev/null 2>&1
+	rc="$?"
+	if [ $rc -eq 0 ]; then
+		echo "collectd is running, stop it first"
+		exit $rc
+	fi
+
+	valgrind --version > /dev/null 2>&1
+	rc=$?
+	if [ $rc -ne 0 ]; then
+		echo "valgrind not fould, please install it first, exit"
+		return $rc
+	fi
+}
+
+start () {
+	echo -n $"Starting collectd: "
+	check_config
+	rc="$?"
+	if test "$rc" -ne 0; then
+		RETVAL=6
+		echo $"not starting due to configuration error"
+		failure $"not starting $service due to configuration error"
+	else
+		if [ "$1" = "memcheck" ];then
+			memcheck_prepare
+			rc="$?"
+			if test "$rc" -ne 0; then
+				RETVAL=$rc
+				echo "memcheck prepare failed"
+			fi
+			logfilename="/tmp/valgrind-$(date '+%F-%T-%N')".log
+			daemon --user "${RUNAS:-root}" valgrind --trace-children=yes --leak-check=full --show-reachable=yes \
+				 --log-file=$logfilename $prog \
+				 -P $COLLECTDMONPID -c $COLLECTD -- -C "$CONFIG" $ARGS
+
+			CPID=`head -n 1 ${COLLECTDMONPID}`
+			collectd_log=${COLLECTD_VALGRIND_PREFIX}_${CPID}.log
+			echo $logfilename > $collectd_log
+		else
+			daemon --user "${RUNAS:-root}" $prog -P $COLLECTDMONPID -c $COLLECTD -- -C "$CONFIG" $ARGS
+		fi
+		RETVAL=$?
+		echo
+		[ $RETVAL -eq 0 ] && touch /var/lock/subsys/$service
+	fi
+}
+
+stop () {
+	echo -n $"Stopping collectd: "
+	killproc -p $COLLECTDMONPID -d $MAXWAIT $prog
+	RETVAL=$?
+	echo
+	[ $RETVAL -eq 0 ] && rm -f /var/lock/subsys/$service
+}
+
+restart () {
+	check_config
+	rc="$?"
+	if test "$rc" -ne 0; then
+		RETVAL=6
+		echo $"not restarting due to configuration error"
+		failure $"not restarting $service due to configuration error"
+	else
+		stop
+		start
+	fi
+}
+
+memcheck_parse () {
+	if [ ! -f $1 ]; then
+		echo "Log file $1 not exist"
+		return -1
+	fi
+
+	checklog=0
+
+	pair_values=`tail -n 100 $1 |grep "definitely lost:"|awk '{print $4, $7}'`
+	lost_bytes=`echo $pair_values|awk '{print $1}'`
+	blocks=`echo $pair_values|awk '{print $2}'`
+	if [ $lost_bytes -gt 0 ];then
+		echo "MEMORY LEAK PROBLEMS: lost bytes: $lost_bytes in $blocks blocks."
+		checklog=1
+	fi
+
+	pair_values=`tail -n 100 $1 |grep "possibly lost:"|awk '{print $4, $7}'`
+	plost_bytes=`echo $pair_values|awk '{print $1}'`
+	pblocks=`echo $pair_values|awk '{print $2}'`
+	if [ $plost_bytes -gt 0 ];then
+		echo "MEMORY LEAK PROBLEMS: possible lost bytes: $plost_bytes in $pblocks blocks."
+		checklog=1
+	fi
+
+	if [ $checklog -eq 1 ];then
+		echo "Please check log file $1 in detail."
+	fi
+}
+
+# See how we were called.
+case "$1" in
+  start)
+	start $2
+	;;
+  stop)
+	CPID=`head -n 1 ${COLLECTDMONPID}`
+	collectd_log=${COLLECTD_VALGRIND_PREFIX}_${CPID}.log
+	stop
+
+	if [ -f "${collectd_log}" ];then
+		logfilename=`tail -n 1 $collectd_log`
+		memcheck_parse $logfilename
+	fi
+	;;
+  status)
+	status -p $COLLECTDMONPID $prog
+	;;
+  restart|reload)
+	restart
+	;;
+  condrestart)
+	[ -f /var/lock/subsys/$service ] && restart || :
+	;;
+  *)
+	echo $"Usage: $0 {start|stop|status|restart|reload|condrestart}"
+	exit 1
+esac
+
+exit $?
+
+# vim:syntax=sh

@@ -1,0 +1,268 @@
+#
+# collectd.conf for DDN LustreMon
+#
+
+Interval      1     
+
+WriteQueueLimitHigh 1000000
+WriteQueueLimitLow   800000
+
+LoadPlugin syslog
+<Plugin syslog>
+	#LogLevel info
+	LogLevel err
+</Plugin>
+
+LoadPlugin filedata
+<Plugin "filedata">
+  <Common>
+    DefinitionFile "/etc/lustre-ieel-2.5.xml"
+  </Common>
+# OST stats
+  <Item>
+    Type "ost_kbytestotal"
+    Query_interval 300
+  </Item>
+  <Item>
+    Type "ost_kbytesfree"
+    Query_interval 300
+  </Item>
+  <Item>
+    Type "ost_stats_write"
+  </Item>
+  <Item>
+    Type "ost_stats_read"
+  </Item>
+
+# Example of ExtendedParse and FieldOption
+<ItemType>
+    Type "ost_jobstats"
+    <ExtendedParse>
+        # Parse the field job_id
+        Field "job_id"
+        # Match the pattern
+        Pattern "(.+)[.]([[:digit:]]+)"
+        <ExtendedField>
+            Index 1
+            Name procname
+        </ExtendedField>
+        <ExtendedField>
+            Index 2
+            Name uid
+        </ExtendedField>
+    </ExtendedParse>
+    TsdbTags "procname=${extendfield:procname} uid={extendfield:uid}"
+    <FieldOption>
+        Field "read_samples"
+        <Option>
+            Name type
+            Value "gauge"
+        </Option>
+    </FieldOption>
+</ItemType>
+
+# MDT stats
+  <Item>
+    Type "mdt_filestotal"
+    Query_interval 300
+  </Item>
+  <Item>
+    Type "mdt_filesfree"
+    Query_interval 300
+  </Item>
+  <Item>
+    Type "md_stats_open"
+  </Item>
+  <Item>
+    Type "md_stats_close"
+  </Item>
+  <Item>
+    Type "md_stats_mknod"
+  </Item>
+  <Item>
+    Type "md_stats_unlink"
+  </Item>
+  <Item>
+    Type "md_stats_mkdir"
+  </Item>
+  <Item>
+    Type "md_stats_rmdir"
+  </Item>
+  <Item>
+    Type "md_stats_rename"
+  </Item>
+  <Item>
+    Type "md_stats_getattr"
+  </Item>
+  <Item>
+    Type "md_stats_setattr"
+  </Item>
+  <Item>
+    Type "md_stats_getxattr"
+  </Item>
+  <Item>
+    Type "md_stats_setxattr"
+  </Item>
+  <Item>
+    Type "md_stats_statfs"
+  </Item>
+  <Item>
+    Type "md_stats_sync"
+  </Item>
+</Plugin>
+
+loadPlugin "write_graphite"
+<Plugin "write_graphite">
+ <Carbon>
+   Host "172.21.66.181"
+   Port "2003"
+   Prefix "collectd."
+   Protocol "udp"
+ </Carbon>
+</Plugin>
+
+LoadPlugin ssh
+<Plugin "ssh">
+  <Common>
+    DefinitionFile "/etc/sfa-0.1_definition.xml"
+    Extra_tags "hostname=SFA14KX"
+    <ServerHost>
+	HostName "10.0.0.1"
+	UserName "user"
+	UserPassword "user"
+	SshTerminator "SFA14KX RAID[1]$"
+     </ServerHost>
+     <ServerHost>
+	HostName "10.0.0.2"
+	UserName "user"
+	UserPassword "user"
+	SshTerminator "SFA14KX RAID[0]$"
+     </ServerHost>
+  </Common>
+  <Item>
+    Type "vd_c_rates"
+  </Item>
+  <Item>
+    Type "vd_read_latency"
+  </Item>
+  <Item>
+    Type "vd_write_latency"
+  </Item>
+  <Item>
+    Type "vd_read_iosize"
+  </Item>
+  <Item>
+    Type "vd_write_iosize"
+  </Item>
+  <Item>
+    Type "pd_c_rates"
+  </Item>
+  <Item>
+    Type "pd_read_latency"
+  </Item>
+  <Item>
+    Type "pd_write_latency"
+  </Item>
+  <Item>
+    Type "pd_read_iosize"
+  </Item>
+  <Item>
+    Type "pd_write_iosize"
+  </Item>
+</Plugin>
+
+LoadPlugin filedata
+# configurations to collect infiniband counters
+<Plugin "filedata">
+  <Common>
+    DefinitionFile "/etc/infiniband-0.1_definition.xml"
+  </Common>
+  <Item>
+    Type "excessive_buffer_overrun_errors"
+  </Item>
+  <Item>
+    Type "link_error_recovery"
+  </Item>
+  <Item>
+    Type "local_link_integrity_errors"
+  </Item>
+  <Item>
+    Type "port_rcv_constraint_errors"
+  </Item>
+  <Item>
+    Type "port_rcv_data"
+  </Item>
+  <Item>
+    Type "port_rcv_errors"
+  </Item>
+  <Item>
+    Type "port_rcv_packets"
+  </Item>
+  <Item>
+    Type "port_rcv_remote_physical_errors"
+  </Item>
+  <Item>
+    Type "port_xmit_constraint_errors"
+  </Item>
+  <Item>
+    Type "port_xmit_data"
+  </Item>
+  <Item>
+    Type "port_xmit_discards"
+  </Item>
+  <Item>
+    Type "port_xmit_packets"
+  </Item>
+  <Item>
+    Type "symbol_error"
+  </Item>
+  <Item>
+    Type "VL15_dropped"
+  </Item>
+  <Item>
+    Type "port_rcv_switch_relay_errors"
+  </Item>
+</Plugin>
+
+LoadPlugin stress2
+<Plugin "stress2">
+  Thread 32
+  <Metric>
+	<Variable>
+	    Name "ost_index"
+	    Number 10
+	    UpdateIterval 0
+	</Variable>
+	<Variable>
+	    Name "job_id"
+	    Number 1000
+	    UpdateIterval 10
+	</Variable>
+	   Host "${key:hostname}"
+	   Plugin "stress-${variable:ost_index:OST%04x}"
+	   PluginInstance "jobstat_${variable:job_id:job%d}"
+	   Type "derive"
+	   TypeInstance "sum_read_bytes"
+	   TsdbName "ost_jobstats_samples"
+	   TsdbTags "optype=sum_read_bytes fs_name=stress ost_index=${variable:ost_index:OST%04x} job_id=${variable:job_id:job%d}"
+   </Metric>
+  <Metric>
+	<Variable>
+	    Name "mdt_index"
+	    Number 10
+	    UpdateIterval 0
+	</Variable>
+	<Variable>
+	    Name "md_stats"
+	    Number 10
+	    UpdateIterval 10
+	</Variable>
+	   Host "${key:hostname}"
+	   Plugin "stress-${variable:mdt_index:MDT%04x}"
+	   PluginInstance "md_stats"
+	   Type "derive"
+	   TypeInstance "open"
+	   TsdbName "md_stats"
+	   TsdbTags "optype=open fs_name=stress mdt_index=${variable:mdt_index:MDT%04x} mdt_stats_open=${variable:mdt_stats_open:%d}"
+   </Metric>
+</Plugin>
