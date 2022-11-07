@@ -126,7 +126,7 @@ class CommandJob(object):
         self.cj_quit_func = quit_func
         # allow for easy stdin input by string, we'll let subprocess create
         # a pipe for stdin input and we'll write to it in the wait loop
-        if isinstance(stdin, basestring):
+        if isinstance(stdin, str):
             self.cj_string_stdin = stdin
             self.cj_stdin = subprocess.PIPE
         else:
