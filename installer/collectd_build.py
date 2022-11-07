@@ -9,7 +9,6 @@ import sys
 import logging
 import os
 import re
-import importlib
 
 # Local libs
 from installer import utils
@@ -772,9 +771,6 @@ def main():
     Build Collectd
     """
     # pylint: disable=unused-variable
-    importlib.reload(sys)
-    sys.setdefaultencoding("utf-8")
-
     identity = time_util.local_strftime(time_util.utcnow(), "%Y-%m-%d-%H_%M_%S")
 
     current_dir = os.getcwd()
