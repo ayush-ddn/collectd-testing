@@ -546,7 +546,7 @@ class SSHHost(object):
         umask = os.umask(0)
         os.umask(umask)
 
-        max_privs = 0777 & ~umask
+        max_privs = 0o777 & ~umask
 
         def set_file_privs(filename):
             """
@@ -557,8 +557,8 @@ class SSHHost(object):
             file_privs = max_privs
             # if the original file permissions do not have at least one
             # executable bit then do not set it anywhere
-            if not file_stat.st_mode & 0111:
-                file_privs &= ~0111
+            if not file_stat.st_mode & 0o111:
+                file_privs &= ~0o111
 
             os.chmod(filename, file_privs)
 
