@@ -133,9 +133,9 @@ class CommandJob(object):
             self.cj_string_stdin = None
             self.cj_stdin = None
         if return_stdout:
-            self.cj_stdout_file = StringIO.StringIO()
+            self.cj_stdout_file = StringIO()
         if return_stderr:
-            self.cj_stderr_file = StringIO.StringIO()
+            self.cj_stderr_file = StringIO()
         self.cj_started = False
         self.cj_killed = False
         self.cj_start_time = None
