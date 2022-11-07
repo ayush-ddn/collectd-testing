@@ -261,7 +261,7 @@ class CommandJob(object):
                         loop = False
                     else:
                         continue
-            data = "".join(tmp_data)
+            data = "".join(tmp_data).encode()
         else:
             # perform a single read
             data = os.read(pipe.fileno(), 1024)
