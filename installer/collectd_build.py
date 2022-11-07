@@ -193,6 +193,19 @@ def collectd_build(workspace, build_host,
                       collectd_git_path, workspace,
                       build_host.sh_hostname)
         return -1
+      
+    command = ("cd %s && chmod u+x version-gen.sh" %
+               (host_collectd_git_dir))
+    retval = build_host.sh_run(command)
+    if retval.cr_exit_status:
+        logging.error("failed to run command [%s] on host [%s], "
+                      "ret = [%d], stdout = [%s], stderr = [%s]",
+                      command,
+                      build_host.sh_hostname,
+                      retval.cr_exit_status,
+                      retval.cr_stdout,
+                      retval.cr_stderr)
+        return -1
 
     command = ("cd %s && mkdir -p libltdl/config && sh ./build.sh && "
                "./configure && "
