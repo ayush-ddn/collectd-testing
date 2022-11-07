@@ -158,12 +158,15 @@ class CommandJob(object):
         if self.cj_timeout:
             self.cj_max_stop_time = self.cj_timeout + self.cj_start_time
         shell = '/bin/bash'
-        self.cj_subprocess = subprocess.Popen(self.cj_command,
-                                              stdout=subprocess.PIPE,
-                                              stderr=subprocess.PIPE,
-                                              shell=True,
-                                              executable=shell,
-                                              stdin=self.cj_stdin)
+        try:
+            self.cj_subprocess = subprocess.Popen(self.cj_command,
+                                                stdout=subprocess.PIPE,
+                                                stderr=subprocess.PIPE,
+                                                shell=True,
+                                                executable=shell,
+                                                stdin=self.cj_stdin)
+        except:
+            logging.error("Failed self.cj_subprocess")
         return 0
 
     def cj_run_stop(self):
