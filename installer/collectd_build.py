@@ -33,7 +33,7 @@ def collectd_build(workspace, build_host, base_path,
     # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     host_collectd_git_dir = ("%s/%s" % (workspace, COLLECT_GIT_STRING))
     host_collectd_rpm_dir = ("%s/%s" % (host_collectd_git_dir, RPM_STRING))
-    local_rpm_dir = ("%s/%s/%s" % (base_path, RPM_STRING, target_cpu))
+    local_rpm_dir = base_path
 
     ret = build_host.sh_send_file(collectd_git_path, workspace)
     if ret:
