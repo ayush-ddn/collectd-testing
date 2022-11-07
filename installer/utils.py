@@ -10,7 +10,7 @@ import os
 import time
 import signal
 import subprocess
-from io import BytesIO
+from io import StringIO
 import select
 import logging
 import logging.handlers
@@ -133,9 +133,9 @@ class CommandJob(object):
             self.cj_string_stdin = None
             self.cj_stdin = None
         if return_stdout:
-            self.cj_stdout_file = BytesIO()
+            self.cj_stdout_file = StringIO()
         if return_stderr:
-            self.cj_stderr_file = BytesIO()
+            self.cj_stderr_file = StringIO()
         self.cj_started = False
         self.cj_killed = False
         self.cj_start_time = None
@@ -261,10 +261,10 @@ class CommandJob(object):
                         loop = False
                     else:
                         continue
-            data = "".join(tmp_data).encode()
+            data = "".join(tmp_data)
         else:
             # perform a single read
-            data = os.read(pipe.fileno(), 1024)
+            data = os.read(pipe.fileno(), 1024).decode()
         if buf is not None:
             buf.write(data)
         if tee:
