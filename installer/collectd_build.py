@@ -508,9 +508,9 @@ def collectd_host_build(workspace, build_host, collectd_git_path,
         return -1
 
     # # Enable powertools for packages not available on repo in RHEL 8
-    # if distro == ssh_host.DISTRO_RHEL8:
-    #     command = ("yum install dnf-plugins-core | yum config-manager --set-enabled powertools")
-    #     build_host.sh_run(command)
+    if distro == ssh_host.DISTRO_RHEL8:
+        command = ("yum install dnf-plugins-core | yum config-manager --set-enabled powertools")
+        build_host.sh_run(command)
 
     if target_cpu == "x86_64":
         command = "rpm -qa | grep i686"
