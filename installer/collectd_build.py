@@ -16,176 +16,25 @@ from installer import time_util
 from installer import ssh_host
 from installer import common
 
-DEPENDENT_STRING = "dependent"
 COLLECTD_STRING = "collectd"
 COLLECT_GIT_STRING = COLLECTD_STRING + ".git"
 RPM_STRING = "RPMS"
-COPYING_STRING = "copying"
 COLLECTD_RPM_NAMES = ["collectd", "collectd-disk", "collectd-filedata",
                       "collectd-ime", "collectd-sensors", "libcollectdclient"]
 
 
-def download_dependent_rpms(host, dependent_dir, distro, target_cpu):
-    """
-    Download dependent RPMs
-    """
-    # pylint: disable=too-many-locals,too-many-return-statements
-    # pylint: disable=too-many-branches,too-many-statements
-    # The yumdb might be broken, so sync
-    command = "yumdb sync"
-    retval = host.sh_run(command)
-    if retval.cr_exit_status:
-        logging.error("failed to run command [%s] on host [%s], "
-                      "ret = [%d], stdout = [%s], stderr = [%s]",
-                      command,
-                      host.sh_hostname,
-                      retval.cr_exit_status,
-                      retval.cr_stdout,
-                      retval.cr_stderr)
-        return -1
-
-    command = ("ls %s" % (dependent_dir))
-    retval = host.sh_run(command)
-    if retval.cr_exit_status:
-        logging.error("failed to run command [%s] on host [%s], "
-                      "ret = [%d], stdout = [%s], stderr = [%s]",
-                      command,
-                      host.sh_hostname,
-                      retval.cr_exit_status,
-                      retval.cr_stdout,
-                      retval.cr_stderr)
-        return -1
-    existing_rpm_fnames = retval.cr_stdout.split()
-
-    dependent_rpms = common.ES_CLIENT_DEPENDENT_RPMS[:]
-    if distro == ssh_host.DISTRO_RHEL7 or distro == ssh_host.DISTRO_RHEL8:
-        for rpm_name in common.ES_SERVER_DEPENDENT_RPMS:
-            if rpm_name not in dependent_rpms:
-                dependent_rpms.append(rpm_name)
-
-        for rpm_name in common.ES_INSTALL_DEPENDENT_RPMS:
-            if rpm_name not in dependent_rpms:
-                dependent_rpms.append(rpm_name)
-
-    command = "yum install -y"
-    for rpm_name in dependent_rpms:
-        command += " " + rpm_name
-
-    # Install the RPM to get the fullname and checksum in db
-    retval = host.sh_run(command)
-    if retval.cr_exit_status:
-        logging.error("failed to run command [%s] on host [%s], "
-                      "ret = [%d], stdout = [%s], stderr = [%s]",
-                      command,
-                      host.sh_hostname,
-                      retval.cr_exit_status,
-                      retval.cr_stdout,
-                      retval.cr_stderr)
-        return -1
-
-    for rpm_name in dependent_rpms:
-        command = "rpm -q %s" % rpm_name
-        retval = host.sh_run(command)
-        if retval.cr_exit_status:
-            logging.error("failed to run command [%s] on host [%s], "
-                          "ret = [%d], stdout = [%s], stderr = [%s]",
-                          command,
-                          host.sh_hostname,
-                          retval.cr_exit_status,
-                          retval.cr_stdout,
-                          retval.cr_stderr)
-            return -1
-
-        rpm_fullnames = retval.cr_stdout.split()
-        if len(rpm_fullnames) != 1:
-            logging.error("got multiple RPMs with query [%s] on host [%s], "
-                          "output = [%s]", command, host.sh_hostname,
-                          retval.cr_stdout)
-            return -1
-
-        rpm_fullname = rpm_fullnames[0]
-        sha256sum = host.sh_yumdb_sha256(rpm_fullname)
-        if sha256sum is None:
-            logging.error("failed to get sha256 of RPM [%s] on host [%s]",
-                          rpm_fullname, host.sh_hostname)
-            return -1
-
-        rpm_filename = rpm_fullname + ".rpm"
-        fpath = dependent_dir + "/" + rpm_filename
-        found = False
-        for filename in existing_rpm_fnames[:]:
-            if filename == rpm_filename:
-                file_sha256sum = host.sh_sha256sum(fpath)
-                if sha256sum != file_sha256sum:
-                    logging.debug("found RPM [%s] with wrong sha256sum, "
-                                  "deleting it", fpath)
-                    ret = host.sh_remove_file(fpath)
-                    if ret:
-                        return -1
-                    break
-
-                logging.debug("found RPM [%s] with correct sha256sum", fpath)
-                existing_rpm_fnames.remove(filename)
-                found = True
-                break
-
-        if found:
-            continue
-
-        logging.debug("downloading RPM [%s] on host [%s]", fpath,
-                      host.sh_hostname)
-        if target_cpu == "x86_64":
-            command = (r"cd %s && yumdownloader -x \*i686 --archlist=x86_64 %s" %
-                       (dependent_dir, rpm_name))
-        else:
-            command = (r"cd %s && yumdownloader %s" %
-                       (dependent_dir, rpm_name))
-        retval = host.sh_run(command)
-        if retval.cr_exit_status:
-            logging.error("failed to run command [%s] on host [%s], "
-                          "ret = [%d], stdout = [%s], stderr = [%s]",
-                          command,
-                          host.sh_hostname,
-                          retval.cr_exit_status,
-                          retval.cr_stdout,
-                          retval.cr_stderr)
-            return -1
-
-        # Don't trust yumdownloader, check again
-        file_sha256sum = host.sh_sha256sum(fpath)
-        if sha256sum != file_sha256sum:
-            logging.error("downloaded RPM [%s] on host [%s] with wrong "
-                          "sha256sum, expected [%s], got [%s]", fpath,
-                          host.sh_hostname, sha256sum, file_sha256sum)
-            return -1
-
-    for fname in existing_rpm_fnames:
-        fpath = dependent_dir + "/" + fname
-        logging.debug("found unnecessary file [%s] under directory [%s], "
-                      "removing it", fname, dependent_dir)
-        ret = host.sh_remove_file(fpath)
-        if ret:
-            return -1
-    return 0
-
-
 def collectd_build(workspace, build_host,
-                   collectd_git_path, iso_cached_dir,
-                   collectd_tarball_name,
-                   distro, distro_number, target_cpu):
+                   collectd_git_path,
+                   collectd_tarball_name, distro_number, target_cpu):
     """
     Build Collectd on a host
     """
     # pylint: disable=too-many-return-statements,too-many-arguments
     # pylint: disable=too-many-locals,too-many-branches,too-many-statements
-    local_distro_rpm_dir = ("%s/%s/%s/%s" %
-                            (iso_cached_dir, RPM_STRING, distro, target_cpu))
-    local_collectd_rpm_copying_dir = ("%s/%s" %
-                                      (local_distro_rpm_dir, target_cpu))
-    local_collectd_rpm_dir = ("%s/%s" %
-                              (local_distro_rpm_dir, COLLECTD_STRING))
     host_collectd_git_dir = ("%s/%s" % (workspace, COLLECT_GIT_STRING))
-    host_collectd_rpm_dir = ("%s/%s/%s" % (host_collectd_git_dir, RPM_STRING, target_cpu))
+    host_collectd_rpm_dir = ("%s/%s" % (host_collectd_git_dir, RPM_STRING))
+    local_rpm_dir = ("%s/%s/%s" % (collectd_git_path, RPM_STRING, target_cpu))
+
     ret = build_host.sh_send_file(collectd_git_path, workspace)
     if ret:
         logging.error("failed to send file [%s] on local host to "
@@ -302,65 +151,27 @@ def collectd_build(workspace, build_host,
                       retval.cr_stderr)
         return -1
 
-    command = ("mkdir -p %s" % (local_distro_rpm_dir))
-    retval = build_host.sh_run(command)
-    if retval.cr_exit_status:
-        logging.error("failed to run command [%s] on host [%s], "
-                      "ret = [%d], stdout = [%s], stderr = [%s]",
-                      command,
-                      build_host.sh_hostname,
-                      retval.cr_exit_status,
-                      retval.cr_stdout,
-                      retval.cr_stderr)
-        return -1
-
-    ret = build_host.sh_get_file(host_collectd_rpm_dir, local_distro_rpm_dir)
+    ret = build_host.sh_get_file(host_collectd_rpm_dir, local_rpm_dir)
     if ret:
-        logging.error("failed to get Collectd RPMs from path [%s] on host "
+        logging.error("failed to get build RPMs from path [%s] on host "
                       "[%s] to local dir [%s]", host_collectd_rpm_dir,
-                      build_host.sh_hostname, local_distro_rpm_dir)
-        return -1
-
-    command = ("mv %s %s" % (local_collectd_rpm_copying_dir, local_collectd_rpm_dir))
-    retval = build_host.sh_run(command)
-    if retval.cr_exit_status:
-        logging.error("failed to run command [%s] on host [%s], "
-                      "ret = [%d], stdout = [%s], stderr = [%s]",
-                      command,
-                      build_host.sh_hostname,
-                      retval.cr_exit_status,
-                      retval.cr_stdout,
-                      retval.cr_stderr)
-        return -1
-
-    command = ("rm %s -fr" % (local_collectd_rpm_dir))
-    retval = build_host.sh_run(command)
-    if retval.cr_exit_status:
-        logging.error("failed to run command [%s] on host [%s], "
-                      "ret = [%d], stdout = [%s], stderr = [%s]",
-                      command,
-                      build_host.sh_hostname,
-                      retval.cr_exit_status,
-                      retval.cr_stdout,
-                      retval.cr_stderr)
+                      build_host.sh_hostname, local_rpm_dir)
         return -1
     return 0
 
 
 def collectd_build_check(workspace, build_host, collectd_git_path,
-                         iso_cached_dir, collectd_version_release,
+                         collectd_version_release,
                          collectd_tarball_name, distro, target_cpu):
     """
     Check and build Collectd RPMs
     """
     # pylint: disable=too-many-arguments,too-many-return-statements
     # pylint: disable=too-many-statements,too-many-branches,too-many-locals
-    local_distro_rpm_dir = ("%s/%s/%s/%s" %
-                            (iso_cached_dir, RPM_STRING, distro, target_cpu))
-    local_collectd_rpm_dir = ("%s/%s" %
-                              (local_distro_rpm_dir, COLLECTD_STRING))
+    local_rpm_dir = ("%s/%s/%s" %
+                            (collectd_git_path, RPM_STRING, target_cpu))
     command = ("mkdir -p %s && ls %s" %
-               (local_collectd_rpm_dir, local_collectd_rpm_dir))
+               (local_rpm_dir, local_rpm_dir))
     retval = build_host.sh_run(command)
     if retval.cr_exit_status:
         logging.error("failed to run command [%s] on host [%s], "
@@ -392,25 +203,25 @@ def collectd_build_check(workspace, build_host, collectd_git_path,
                 found = True
                 rpm_collectd_fnames.remove(rpm_collectd_fname)
                 logging.debug("RPM [%s/%s] already cached",
-                              local_collectd_rpm_dir, collect_rpm_full)
+                              local_rpm_dir, collect_rpm_full)
                 break
 
         if not found:
             logging.debug("RPM [%s] not cached in directory [%s], building "
-                          "Collectd", collect_rpm_full, local_collectd_rpm_dir)
+                          "Collectd", collect_rpm_full, local_rpm_dir)
             break
 
     if not found:
         ret = collectd_build(workspace, build_host, collectd_git_path,
-                             iso_cached_dir, collectd_tarball_name,
-                             distro, distro_number, target_cpu)
+                             collectd_tarball_name,
+                             distro_number, target_cpu)
         if ret:
             logging.error("failed to build Collectd on host [%s]",
                           build_host.sh_hostname)
             return -1
 
         # Don't trust the build, check RPMs again
-        command = ("ls %s" % (local_collectd_rpm_dir))
+        command = ("ls %s" % (local_rpm_dir))
         retval = build_host.sh_run(command)
         if retval.cr_exit_status:
             logging.error("failed to run command [%s] on host [%s], "
@@ -433,13 +244,13 @@ def collectd_build_check(workspace, build_host, collectd_git_path,
                     found = True
                     rpm_collectd_fnames.remove(rpm_collectd_fname)
                     logging.debug("RPM [%s/%s] already cached",
-                                  local_collectd_rpm_dir, collect_rpm_full)
+                                  local_rpm_dir, collect_rpm_full)
                     break
 
             if not found:
                 logging.error("RPM [%s] not found in directory [%s] after "
                               "building Collectd", collect_rpm_full,
-                              local_collectd_rpm_dir)
+                              local_rpm_dir)
                 return -1
     else:
         collect_rpm_pattern = (r"collectd-\S+-%s.el%s.%s.rpm" %
@@ -450,7 +261,7 @@ def collectd_build_check(workspace, build_host, collectd_git_path,
             match = collect_rpm_regular.match(rpm_collectd_fname)
             if not match:
                 fpath = ("%s/%s" %
-                         (local_collectd_rpm_dir, rpm_collectd_fname))
+                         (local_rpm_dir, rpm_collectd_fname))
                 logging.debug("found a file [%s] not matched with pattern "
                               "[%s], removing it", fpath,
                               collect_rpm_pattern)
@@ -470,8 +281,7 @@ def collectd_build_check(workspace, build_host, collectd_git_path,
 
 
 def collectd_host_build(workspace, build_host, collectd_git_path,
-               iso_cached_dir, collectd_version_release,
-               collectd_tarball_name):
+               collectd_version_release, collectd_tarball_name):
     """
     Build on host
     """
@@ -488,16 +298,6 @@ def collectd_host_build(workspace, build_host, collectd_git_path,
         logging.error("failed to get target cpu on host [%s]",
                       build_host.sh_hostname)
         return -1
-
-    local_distro_rpm_dir = ("%s/%s/%s/%s" %
-                            (iso_cached_dir, RPM_STRING, distro, target_cpu))
-    local_dependent_rpm_dir = ("%s/%s" %
-                               (local_distro_rpm_dir, DEPENDENT_STRING))
-    local_copying_rpm_dir = ("%s/%s" % (local_distro_rpm_dir, COPYING_STRING))
-    local_copying_dependent_rpm_dir = ("%s/%s" %
-                                       (local_copying_rpm_dir,
-                                        DEPENDENT_STRING))
-    host_dependent_rpm_dir = ("%s/%s" % (workspace, DEPENDENT_STRING))
 
     # Update to the latest distro release
     command = "yum update -y"
@@ -585,88 +385,10 @@ def collectd_host_build(workspace, build_host, collectd_git_path,
         return -1
 
     ret = collectd_build_check(workspace, build_host, collectd_git_path,
-                               iso_cached_dir, collectd_version_release,
-                               collectd_tarball_name, distro, target_cpu)
+                               collectd_version_release, collectd_tarball_name, distro, target_cpu)
     if ret:
         return -1
 
-    dependent_rpm_cached = False
-    command = ("test -e %s" % (local_dependent_rpm_dir))
-    retval = build_host.sh_run(command)
-    if retval.cr_exit_status == 0:
-        command = ("test -d %s" % (local_dependent_rpm_dir))
-        retval = build_host.sh_run(command)
-        if retval.cr_exit_status != 0:
-            command = ("rm -f %s" % (local_dependent_rpm_dir))
-            retval = build_host.sh_run(command)
-            if retval.cr_exit_status:
-                logging.error("path [%s] is not a directory and can't be "
-                              "deleted", local_dependent_rpm_dir)
-                return -1
-        else:
-            dependent_rpm_cached = True
-
-    if dependent_rpm_cached:
-        ret = build_host.sh_send_file(local_dependent_rpm_dir, workspace)
-        if ret:
-            logging.error("failed to send cached dependent RPMs from local path "
-                          "[%s] to dir [%s] on host [%s]", local_dependent_rpm_dir,
-                          local_dependent_rpm_dir, build_host.sh_hostname)
-            return -1
-    else:
-        command = ("mkdir -p %s" % (host_dependent_rpm_dir))
-        retval = build_host.sh_run(command)
-        if retval.cr_exit_status:
-            logging.error("failed to run command [%s] on host [%s], "
-                          "ret = [%d], stdout = [%s], stderr = [%s]",
-                          command,
-                          build_host.sh_hostname,
-                          retval.cr_exit_status,
-                          retval.cr_stdout,
-                          retval.cr_stderr)
-            return -1
-
-    ret = download_dependent_rpms(build_host, host_dependent_rpm_dir, distro,
-                                  target_cpu)
-    if ret:
-        logging.error("failed to download depdendent RPMs")
-        return ret
-
-    command = ("rm -fr %s && mkdir -p %s" %
-               (local_copying_rpm_dir, local_copying_rpm_dir))
-    retval = build_host.sh_run(command)
-    if retval.cr_exit_status:
-        logging.error("failed to run command [%s] on host [%s], "
-                      "ret = [%d], stdout = [%s], stderr = [%s]",
-                      command,
-                      build_host.sh_hostname,
-                      retval.cr_exit_status,
-                      retval.cr_stdout,
-                      retval.cr_stderr)
-        return -1
-
-    ret = build_host.sh_get_file(host_dependent_rpm_dir, local_copying_rpm_dir)
-    if ret:
-        logging.error("failed to get dependent RPMs from path [%s] on host "
-                      "[%s] to local dir [%s]", host_dependent_rpm_dir,
-                      build_host.sh_hostname, local_copying_rpm_dir)
-        return -1
-
-    command = ("rm -fr %s && mv %s %s && rm -rf %s" %
-               (local_dependent_rpm_dir,
-                local_copying_dependent_rpm_dir,
-                local_dependent_rpm_dir,
-                local_copying_rpm_dir))
-    retval = build_host.sh_run(command)
-    if retval.cr_exit_status:
-        logging.error("failed to run command [%s] on host [%s], "
-                      "ret = [%d], stdout = [%s], stderr = [%s]",
-                      command,
-                      build_host.sh_hostname,
-                      retval.cr_exit_status,
-                      retval.cr_stdout,
-                      retval.cr_stderr)
-        return -1
     return 0
 
 def collecd_build_prepare(current_dir, relative_workspace):
@@ -688,20 +410,7 @@ def collecd_build_prepare(current_dir, relative_workspace):
                       build_host.sh_hostname)
         return -1
 
-    iso_cached_dir = current_dir + "/../iso_cached_dir"
     collectd_git_path = current_dir + "/../" + "collectd.git"
-    rpm_dir = iso_cached_dir + "/RPMS"
-    command = ("mkdir -p %s" % (rpm_dir))
-    retval = build_host.sh_run(command)
-    if retval.cr_exit_status:
-        logging.error("failed to run command [%s] on host [%s], "
-                      "ret = [%d], stdout = [%s], stderr = [%s]",
-                      command,
-                      build_host.sh_hostname,
-                      retval.cr_exit_status,
-                      retval.cr_stdout,
-                      retval.cr_stderr)
-        return -1
 
     collectd_git_url = "https://github.com/ayush-ddn/collectd.git"
     # collectd_git_url = "https://github.com/DDNStorage/collectd.git"
@@ -772,7 +481,7 @@ def collecd_build_prepare(current_dir, relative_workspace):
     # host
     local_workspace = current_dir + "/" + relative_workspace
     ret = collectd_host_build(local_workspace, build_host, collectd_git_path,
-                     iso_cached_dir, collectd_version_release, collectd_tarball_name)
+                     collectd_version_release, collectd_tarball_name)
     if ret:
         logging.error("failed to prepare RPMs on local host")
         return -1
