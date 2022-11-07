@@ -592,7 +592,7 @@ class SSHHost(object):
         dest = os.path.abspath(dest)
 
         if self.sh_local:
-            if isinstance(source, basestring):
+            if isinstance(source, str):
                 if os.path.isdir(dest):
                     source_dir = os.path.basename(source)
                     command = "test %s -ef %s" % (source_dir, dest)
@@ -609,7 +609,7 @@ class SSHHost(object):
                                       "the same with dest [%s]", source, dest)
                         return 0
 
-        if isinstance(source, basestring):
+        if isinstance(source, str):
             source = [source]
 
         if delete_dest and os.path.isdir(dest):
@@ -700,7 +700,7 @@ class SSHHost(object):
         # pylint: disable=too-many-arguments,too-many-locals,too-many-return-statements
         # pylint: disable=too-many-branches
         if self.sh_local:
-            if isinstance(source, basestring):
+            if isinstance(source, str):
                 if os.path.isdir(dest):
                     source_dir = os.path.basename(source)
                     command = "test %s -ef %s" % (source_dir, dest)
@@ -717,7 +717,7 @@ class SSHHost(object):
                                       "the same with dest [%s]", source, dest)
                         return 0
 
-        if isinstance(source, basestring):
+        if isinstance(source, str):
             source = [source]
 
         if self.sh_local:
