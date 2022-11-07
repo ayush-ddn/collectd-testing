@@ -10,7 +10,7 @@ import os
 import time
 import signal
 import subprocess
-import StringIO
+from io import StringIO
 import select
 import logging
 import logging.handlers
