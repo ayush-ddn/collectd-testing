@@ -23,7 +23,7 @@ COLLECTD_RPM_NAMES = ["collectd", "collectd-disk", "collectd-filedata",
                       "collectd-ime", "collectd-sensors", "libcollectdclient"]
 
 
-def collectd_build(workspace, build_host,
+def collectd_build(workspace, build_host, base_path,
                    collectd_git_path,
                    collectd_tarball_name, distro_number, target_cpu):
     """
@@ -33,7 +33,7 @@ def collectd_build(workspace, build_host,
     # pylint: disable=too-many-locals,too-many-branches,too-many-statements
     host_collectd_git_dir = ("%s/%s" % (workspace, COLLECT_GIT_STRING))
     host_collectd_rpm_dir = ("%s/%s" % (host_collectd_git_dir, RPM_STRING))
-    local_rpm_dir = ("%s/%s/%s" % (collectd_git_path, RPM_STRING, target_cpu))
+    local_rpm_dir = ("%s/%s/%s" % (base_path, RPM_STRING, target_cpu))
 
     ret = build_host.sh_send_file(collectd_git_path, workspace)
     if ret:
@@ -160,7 +160,7 @@ def collectd_build(workspace, build_host,
     return 0
 
 
-def collectd_build_check(workspace, build_host, collectd_git_path,
+def collectd_build_check(workspace, build_host, base_path, collectd_git_path,
                          collectd_version_release,
                          collectd_tarball_name, distro, target_cpu):
     """
@@ -169,7 +169,7 @@ def collectd_build_check(workspace, build_host, collectd_git_path,
     # pylint: disable=too-many-arguments,too-many-return-statements
     # pylint: disable=too-many-statements,too-many-branches,too-many-locals
     local_rpm_dir = ("%s/%s/%s" %
-                            (collectd_git_path, RPM_STRING, target_cpu))
+                            (base_path, RPM_STRING, target_cpu))
     command = ("mkdir -p %s && ls %s" %
                (local_rpm_dir, local_rpm_dir))
     retval = build_host.sh_run(command)
@@ -212,7 +212,7 @@ def collectd_build_check(workspace, build_host, collectd_git_path,
             break
 
     if not found:
-        ret = collectd_build(workspace, build_host, collectd_git_path,
+        ret = collectd_build(workspace, build_host, base_path, collectd_git_path,
                              collectd_tarball_name,
                              distro_number, target_cpu)
         if ret:
@@ -280,7 +280,7 @@ def collectd_build_check(workspace, build_host, collectd_git_path,
     return 0
 
 
-def collectd_host_build(workspace, build_host, collectd_git_path,
+def collectd_host_build(workspace, build_host, base_path, collectd_git_path,
                collectd_version_release, collectd_tarball_name):
     """
     Build on host
@@ -384,7 +384,7 @@ def collectd_host_build(workspace, build_host, collectd_git_path,
                       retval.cr_stderr)
         return -1
 
-    ret = collectd_build_check(workspace, build_host, collectd_git_path,
+    ret = collectd_build_check(workspace, build_host, base_path, collectd_git_path,
                                collectd_version_release, collectd_tarball_name, distro, target_cpu)
     if ret:
         return -1
@@ -480,7 +480,7 @@ def collecd_build_prepare(current_dir, relative_workspace):
     # The build host of CentOS7 could potentially be another host, not local
     # host
     local_workspace = current_dir + "/" + relative_workspace
-    ret = collectd_host_build(local_workspace, build_host, collectd_git_path,
+    ret = collectd_host_build(local_workspace, build_host, current_dir, collectd_git_path,
                      collectd_version_release, collectd_tarball_name)
     if ret:
         logging.error("failed to prepare RPMs on local host")
