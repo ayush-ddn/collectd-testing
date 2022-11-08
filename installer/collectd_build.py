@@ -168,7 +168,7 @@ def collectd_build_check(workspace, build_host, base_path, collectd_git_path,
     """
     # pylint: disable=too-many-arguments,too-many-return-statements
     # pylint: disable=too-many-statements,too-many-branches,too-many-locals
-    local_rpm_dir = ("%s/%s/%s" %
+    local_rpm_dir = ("%s/%s" %
                             (base_path, RPM_STRING))
     command = ("mkdir -p %s && ls %s" %
                (local_rpm_dir, local_rpm_dir))
@@ -387,6 +387,8 @@ def collectd_host_build(workspace, build_host, base_path, collectd_git_path,
     ret = collectd_build_check(workspace, build_host, base_path, collectd_git_path,
                                collectd_version_release, collectd_tarball_name, distro, target_cpu)
     if ret:
+        logging.error("failed to build collectd_build_check on host [%s]",
+                          build_host.sh_hostname)
         return -1
 
     return 0
