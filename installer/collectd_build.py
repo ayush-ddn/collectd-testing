@@ -169,7 +169,7 @@ def collectd_build_check(workspace, build_host, base_path, collectd_git_path,
     # pylint: disable=too-many-arguments,too-many-return-statements
     # pylint: disable=too-many-statements,too-many-branches,too-many-locals
     local_rpm_dir = ("%s/%s/%s" %
-                            (base_path, RPM_STRING, target_cpu))
+                            (base_path, RPM_STRING))
     command = ("mkdir -p %s && ls %s" %
                (local_rpm_dir, local_rpm_dir))
     retval = build_host.sh_run(command)
